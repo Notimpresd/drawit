@@ -1,0 +1,358 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LAN Free Draw</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --bar-h: 64px;
+    /* Button theme */
+    --btn-bg:         #222;
+    --btn-bg-hover:   #2b2b2b;
+    --btn-bg-press:   #3a2f6b;   /* pressed color */
+    --btn-border:     #444;
+    --btn-border-press:#5c57a0;
+    --btn-shadow:     #0008;
+  }
+  html, body { margin:0; height:100%; background:#111; color:#eee; font-family:Arial, Helvetica, sans-serif; }
+  #topbar { display:flex; gap:10px; align-items:center; padding:10px; background:#1b1b1b; position:fixed; top:0; left:0; right:0; z-index:10; flex-wrap:wrap; }
+  input, button { background:var(--btn-bg); color:#eee; border:1px solid var(--btn-border); padding:6px 10px; border-radius:10px; }
+  /* Buttons: color-change while pressed + slight push */
+  button{
+    cursor:pointer;
+    box-shadow:0 3px 0 var(--btn-shadow), 0 0 0 1px #0002 inset;
+    transition:
+      transform .12s ease,
+      background-color .15s ease,
+      border-color .15s ease,
+      filter .15s ease,
+      box-shadow .15s ease;
+  }
+  button:hover{ background:var(--btn-bg-hover); }
+  button.pressing,
+  button:active{
+    transform:translateY(3px) scale(0.985);
+    background:var(--btn-bg-press);
+    border-color:var(--btn-border-press);
+    box-shadow:0 0 0 #0000, 0 0 0 1px #0004 inset;
+    filter:brightness(1.06);
+  }
+
+  #sharelink { width:360px; max-width:60vw; }
+  #canvas { position:fixed; inset:0; top:var(--bar-h); left:240px; cursor:crosshair; background:#000; touch-action:none; }
+  #sidebar { position:fixed; top:var(--bar-h); left:0; bottom:0; width:240px; background:#141414; border-right:1px solid #2a2a2a; overflow:auto; }
+  #me { padding:10px; border-bottom:1px solid #2a2a2a; }
+  #roster { padding:6px; }
+  .pill { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; margin:6px 6px; background:#1e1e1e; border:1px solid #2a2a2a; }
+  .dot { width:14px; height:14px; border-radius:50%; border:1px solid #000; flex:0 0 auto; }
+  #badge { margin-left:auto; opacity:0.8; }
+  #size { width:64px; }
+  .btnrow { display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+  .small { font-size:12px; opacity:.7; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <span>Share this link:</span>
+  <input id="sharelink" readonly>
+  <button id="copylink">Copy Link</button>
+
+  <span style="margin-left:16px;">Brush:</span>
+  <input id="size" type="number" min="1" max="50" value="4">
+  <button id="undo">Undo</button>
+  <button id="clear">Clear Mine</button>
+  <span id="badge" style="margin-left:auto;">Peers: 0</span>
+  <span id="wsdebug" class="small" style="display:block; width:100%;">Connecting…</span>
+</div>
+
+<div id="sidebar">
+  <div id="me">
+    <div class="pill"><span class="dot" id="meDot"></span><span id="meName">connecting...</span></div>
+    <small class="small">Name and color are assigned automatically.</small>
+    <div class="btnrow">
+      <button id="undo2">Undo</button>
+      <button id="clear2">Clear Mine</button>
+    </div>
+  </div>
+  <div id="roster"></div>
+</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+(function(){
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+
+  const sizeInput = document.getElementById('size');
+  const clearBtn = document.getElementById('clear');
+  const clearBtn2 = document.getElementById('clear2');
+  const undoBtn = document.getElementById('undo');
+  const undoBtn2 = document.getElementById('undo2');
+  const copyBtn = document.getElementById('copylink');
+
+  const badge = document.getElementById('badge');
+  const meName = document.getElementById('meName');
+  const meDot  = document.getElementById('meDot');
+  const rosterBox = document.getElementById('roster');
+  const shareInput = document.getElementById('sharelink');
+  const wsdebug = document.getElementById('wsdebug');
+
+  function fit(){ canvas.width = window.innerWidth - 240; canvas.height = window.innerHeight - parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-h')); }
+  window.addEventListener('resize', fit); fit();
+
+  // Press-and-hold FX: color change + push while held, linger after release
+  function addPressFX(btn, lingerMs = 220){
+    let down = false, t = null;
+    const onDown = ()=>{ down = true; if (t) clearTimeout(t); btn.classList.add('pressing'); };
+    const onUp   = ()=>{ if (!down) return; down = false; if (t) clearTimeout(t); t = setTimeout(()=>btn.classList.remove('pressing'), lingerMs); };
+    btn.addEventListener('mousedown', onDown);
+    btn.addEventListener('mouseup', onUp);
+    btn.addEventListener('mouseleave', onUp);
+    btn.addEventListener('touchstart', onDown, {passive:true});
+    btn.addEventListener('touchend', onUp);
+    btn.addEventListener('touchcancel', onUp);
+    btn.addEventListener('keydown', e=>{ if (e.key===' '||e.key==='Enter') onDown(); });
+    btn.addEventListener('keyup',   e=>{ if (e.key===' '||e.key==='Enter') onUp(); });
+  }
+  [copyBtn, undoBtn, clearBtn, undoBtn2, clearBtn2].forEach(b => addPressFX(b));
+
+  let wsUrl = null;
+  let httpUrl = null;
+
+  async function detectLinks(){
+    try {
+      const base = (location.protocol === 'file:') ? 'http://127.0.0.1:8000' : '';
+      const res = await fetch(base + '/whoami', {cache:'no-store'});
+      const info = await res.json();
+      httpUrl = info.http_url;
+      wsUrl   = info.ws_url;
+
+      // If server returned localhost but we’re on a LAN host, rewrite to current host
+      const host = window.location.hostname;
+      if ((httpUrl.includes('localhost') || httpUrl.includes('127.')) && host && host !== 'localhost' && !host.startsWith('127.')) {
+        const httpPort = (new URL(httpUrl)).port || '8000';
+        const wsPort   = (new URL(wsUrl)).port   || '8765';
+        httpUrl = `http://${host}:${httpPort}/index.html`;
+        wsUrl   = `ws://${host}:${wsPort}`;
+      }
+    } catch (e) {
+      const host = window.location.hostname || '127.0.0.1';
+      httpUrl = `http://${host}:8000/index.html`;
+      wsUrl   = `ws://${host}:8765`;
+    }
+    shareInput.value = httpUrl;
+    wsdebug.textContent = `WS: ${wsUrl}`;
+  }
+
+  function copy(text){
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(()=>fallback());
+    } else {
+      fallback();
+    }
+    function fallback(){
+      shareInput.select();
+      document.execCommand('copy');
+    }
+  }
+  copyBtn.addEventListener('click', ()=> copy(shareInput.value));
+
+  let ws;
+  const me = { id:null, name:null, color:"#ffffff", size:Number(sizeInput.value)||4 };
+
+  async function connect(){
+    if (!wsUrl) await detectLinks();
+    try { if (ws) ws.close(); } catch(e){}
+    ws = new WebSocket(wsUrl);
+    ws.onopen = ()=> { wsdebug.textContent = `Connected: ${wsUrl}`; };
+    ws.onclose = ()=> { wsdebug.textContent = `Disconnected`; };
+    ws.onerror = ()=> { wsdebug.textContent = `WS error`; };
+    ws.onmessage = (ev) => {
+      let msg = ev.data;
+      try { msg = JSON.parse(ev.data); } catch(_){}
+      handle(msg);
+    };
+  }
+
+  // Live brush-size update while typing
+  sizeInput.addEventListener('input', ()=>{
+    let v = parseFloat(sizeInput.value);
+    if (Number.isFinite(v)) {
+      v = Math.max(1, Math.min(50, v));
+      me.size = v;
+    }
+  });
+
+  const sendClear = ()=> send({type:'clearMine'});
+  const sendUndo  = ()=> send({type:'undoMine'});
+  clearBtn.addEventListener('click', sendClear);
+  clearBtn2.addEventListener('click', sendClear);
+  undoBtn.addEventListener('click', sendUndo);
+  undoBtn2.addEventListener('click', sendUndo);
+
+  // Ctrl/Cmd+Z
+  window.addEventListener('keydown', (e)=>{
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      sendUndo();
+    }
+  });
+
+  function pos(e){
+    const r = canvas.getBoundingClientRect();
+    if (e.touches && e.touches[0]) {
+      return { x: e.touches[0].clientX - r.left, y: e.touches[0].clientY - r.top };
+    }
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function drawSeg(x0,y0,x1,y1,color,size){
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = size;
+    ctx.beginPath();
+    ctx.moveTo(x0,y0);
+    ctx.lineTo(x1,y1);
+    ctx.stroke();
+  }
+
+  function drawDot(x,y,color,size){
+    ctx.fillStyle = color;
+    const r = Math.max(1, size / 2);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // stroke id for grouping segments
+  let drawing = false;
+  let last = null;
+  let moved = false;
+  let sid = null;
+
+  function newSID(){
+    if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 's' + Math.random().toString(36).slice(2, 10);
+  }
+
+  function pointerDown(e){
+    e.preventDefault();
+    if (!me.id) return;
+    drawing = true;
+    moved = false;
+    sid = newSID();
+    last = pos(e);
+  }
+
+  function pointerMove(e){
+    if (!drawing) return;
+    const p = pos(e);
+    if (p.x !== last.x || p.y !== last.y) {
+      moved = true;
+      drawSeg(last.x,last.y,p.x,p.y, me.color, me.size);
+      send({type:'draw', x0:last.x, y0:last.y, x1:p.x, y1:p.y, size:me.size, sid});
+      last = p;
+    }
+  }
+
+  function pointerUp(e){
+    if (!drawing) return;
+    drawing = false;
+    if (!moved && last){
+      send({type:'dot', x:last.x, y:last.y, size:me.size, sid});
+      drawDot(last.x, last.y, me.color, me.size);
+    }
+    last = null;
+    sid = null;
+  }
+
+  canvas.addEventListener('mousedown', pointerDown);
+  canvas.addEventListener('mousemove', pointerMove);
+  window.addEventListener('mouseup', pointerUp);
+  canvas.addEventListener('touchstart', pointerDown, {passive:false});
+  canvas.addEventListener('touchmove', pointerMove, {passive:false});
+  canvas.addEventListener('touchend', pointerUp);
+
+  function send(obj){
+    if (ws && ws.readyState === 1) {
+      try { ws.send(JSON.stringify(obj)); } catch(e){}
+    }
+  }
+
+  function renderRoster(peers){
+    rosterBox.innerHTML = "";
+    badge.textContent = "Peers: " + peers.length;
+    const others = peers.filter(p => p.id !== me.id);
+    for (const p of others) {
+      const div = document.createElement('div');
+      div.className = "pill";
+      const dot = document.createElement('span');
+      dot.className = "dot";
+      dot.style.background = p.color;
+      const name = document.createElement('span');
+      name.textContent = p.name;
+      div.appendChild(dot); div.appendChild(name);
+      rosterBox.appendChild(div);
+    }
+  }
+
+  function handle(msg){
+    if (!msg || !msg.type) return;
+
+    if (msg.type === 'welcome') {
+      me.id = msg.id; me.name = msg.name; me.color = msg.color;
+      meName.textContent = me.name;
+      meDot.style.background = me.color;
+      return;
+    }
+
+    if (msg.type === 'roster') {
+      renderRoster(msg.peers || []);
+      return;
+    }
+
+    if (msg.type === 'history') {
+      const evts = msg.events || [];
+      for (const e of evts) {
+        if (e.type === 'draw') {
+          drawSeg(e.x0, e.y0, e.x1, e.y1, e.color, e.size);
+        } else if (e.type === 'dot') {
+          drawDot(e.x, e.y, e.color, e.size);
+        }
+      }
+      return;
+    }
+
+    if (msg.type === 'rebuild') {
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const evts = msg.events || [];
+      for (const e of evts) {
+        if (e.type === 'draw') {
+          drawSeg(e.x0, e.y0, e.x1, e.y1, e.color, e.size);
+        } else if (e.type === 'dot') {
+          drawDot(e.x, e.y, e.color, e.size);
+        }
+      }
+      return;
+    }
+
+    if (msg.type === 'draw') {
+      drawSeg(msg.x0, msg.y0, msg.x1, msg.y1, msg.color, msg.size);
+      return;
+    }
+
+    if (msg.type === 'dot') {
+      drawDot(msg.x, msg.y, msg.color, msg.size);
+      return;
+    }
+  }
+
+  (async ()=>{ await detectLinks(); await connect(); })();
+})();
+</script>
+</body>
+</html>
