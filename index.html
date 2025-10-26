@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>LAN Free Draw</title>
+<title>Drawit</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   :root{
@@ -10,11 +10,13 @@
     --sidebar-w: 240px;
     --bg:#111; --panel:#151515; --line:#222; --text:#eee;
     --btn:#222; --btn2:#2b2b2b; --btn3:#3a2f6b; --bd:#444; --bd2:#5c57a0; --sh:#0008;
+    --accent:#7b6dff;
   }
   html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;}
   .only-mobile{display:none}
   .only-desktop{display:initial}
 
+  /* Top bar */
   #topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
           padding:8px 10px;height:var(--bar-h);background:#161616;border-bottom:1px solid var(--line);
           position:fixed;top:0;left:0;right:0;z-index:10}
@@ -28,17 +30,42 @@
   #sharelink{width:380px}
   #size{width:64px}
 
+  /* Layout */
   #sidebar{position:fixed;top:var(--bar-h);bottom:0;left:0;width:var(--sidebar-w);
            border-right:1px solid var(--line);background:var(--panel);padding:8px;overflow:auto;z-index:9}
   #canvas{position:fixed;top:var(--bar-h);left:var(--sidebar-w);right:0;bottom:0;background:#0d0d0d;cursor:crosshair}
 
   .pill{display:flex;align-items:center;gap:8px;background:#1b1b1b;padding:6px 8px;border:1px solid #333;border-radius:12px;margin-bottom:6px}
   .dot{width:14px;height:14px;border-radius:50%;border:1px solid #0008;box-shadow:0 0 0 1px #0004 inset}
-  .btnrow{display:flex;gap:8px;margin-top:6px}
+  .btnrow{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
   .iconbtn{padding:4px 6px;line-height:1;border-radius:8px}
   .name-input{width:100%;padding:5px 7px;border-radius:8px}
+  .poke{margin-left:auto}
 
-  /* ---------- Mobile (<900px) ---------- */
+  /* Toast (boop) */
+  #toast{position:fixed;top:calc(var(--bar-h) + 10px);left:50%;transform:translateX(-50%);z-index:20;pointer-events:none}
+  .toast{background:#1c1c1c;border:1px solid #333;padding:10px 14px;border-radius:10px;box-shadow:0 10px 30px #000a;opacity:0}
+  .toast.show{animation:fadeSlide 1.8s ease forwards}
+  @keyframes fadeSlide{
+    0%{opacity:0; transform:translate(-50%, -6px)}
+    10%{opacity:1; transform:translate(-50%, 0)}
+    80%{opacity:1}
+    100%{opacity:0; transform:translate(-50%, -6px)}
+  }
+
+  /* Login overlay */
+  #overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter: blur(6px);
+           display:flex;align-items:center;justify-content:center;z-index:30}
+  .card{width:min(92vw, 420px);background:#141414;border:1px solid #2a2a2a;border-radius:16px;
+        box-shadow:0 20px 60px #000c;padding:20px}
+  .title{font-weight:700;font-size:28px;margin:4px 0 14px}
+  .subtitle{opacity:.8;margin:-6px 0 18px}
+  .field{display:flex;gap:8px}
+  .field input{flex:1}
+  .hint{font-size:12px;opacity:.7;margin-top:8px}
+  .play{background:var(--accent);border-color:#9b92ff}
+
+  /* Mobile */
   @media (max-width: 900px){
     :root{ --bar-h: 56px; }
     .only-mobile{display:initial}
@@ -54,58 +81,70 @@
       transform: translateX(0);
       box-shadow: 8px 0 20px #000a;
     }
-    #drawerScrim{
-      position:fixed;inset:0;background:#0008;z-index:8;display:none
-    }
+    #drawerScrim{position:fixed;inset:0;background:#0008;z-index:8;display:none}
     body.mobile-drawer-open #drawerScrim{display:block}
-    /* Canvas takes full width on mobile (sidebar overlays) */
     #canvas{left:0}
   }
 </style>
 </head>
 <body>
+<!-- Top bar -->
 <div id="topbar">
-  <!-- Left: Share -->
   <span class="only-desktop">Share:</span>
   <input id="sharelink" class="only-desktop" readonly>
   <button id="copylink" title="Copy share link">Copy Link</button>
   <button id="shareBtn" class="only-mobile" title="Share">Share</button>
 
-  <!-- Tools -->
-  <span class="only-desktop" style="margin-left:16px;">Brush:</span>
+  <span class="only-desktop" style="margin-left:16px;">🖌️ Brush:</span>
   <input id="size" type="number" min="1" max="50" step="1" value="4" aria-label="Brush size">
   <div class="only-mobile" style="display:flex;gap:6px">
     <button id="minusSize" title="Smaller">−</button>
     <button id="plusSize"  title="Bigger">+</button>
   </div>
-  <button id="undo">Undo</button>
-  <button id="clear">Clear Mine</button>
+  <button id="undo">↩️ Undo</button>
+  <button id="clear">🧹 Clear All</button>
 
   <div class="grow"></div>
 
-  <!-- Right: Players + Status -->
   <span id="badge">Peers: 0</span>
   <span id="wsdebug" class="small" style="margin-left:8px;">Connecting...</span>
   <button id="playersBtn" class="only-mobile" style="margin-left:8px">Players</button>
 </div>
 
+<!-- Left players -->
 <div id="sidebar" aria-label="Players drawer">
   <div id="me">
     <div class="pill" id="mePill">
       <span class="dot" id="meDot"></span>
-      <span id="meName">connecting...</span>
-      <button id="editName" class="iconbtn" title="Edit name" aria-label="Edit name">✎</button>
+      <span id="meName">…</span>
     </div>
     <div class="btnrow">
-      <button id="undo2">Undo</button>
-      <button id="clear2">Clear Mine</button>
+      <button id="undo2">↩️ Undo</button>
+      <button id="clear2">🧹 Clear All</button>
     </div>
   </div>
   <div id="roster" style="padding:6px"></div>
 </div>
 <div id="drawerScrim" class="only-mobile"></div>
 
+<!-- Canvas -->
 <canvas id="canvas"></canvas>
+
+<!-- Toasts -->
+<div id="toast"></div>
+
+<!-- Login overlay -->
+<div id="overlay">
+  <div class="card">
+    <div class="title">Drawit</div>
+    <div class="subtitle">Enter your name to start</div>
+    <div class="field">
+      <input id="loginName" placeholder="Your name" maxlength="24" autocomplete="name">
+      <button id="playBtn" class="play">▶ Play</button>
+    </div>
+    <div class="hint">3–24 chars. Letters, numbers, space, - and _</div>
+  </div>
+</div>
 
 <script>
 (function(){
@@ -124,7 +163,6 @@
 
   const meName = document.getElementById('meName');
   const meDot  = document.getElementById('meDot');
-  const editBtn= document.getElementById('editName');
   const rosterBox = document.getElementById('roster');
 
   const playersBtn = document.getElementById('playersBtn');
@@ -135,10 +173,14 @@
   const clearBtn= document.getElementById('clear');
   const clearBtn2= document.getElementById('clear2');
 
+  const login = document.getElementById('overlay');
+  const playBtn = document.getElementById('playBtn');
+  const loginName = document.getElementById('loginName');
+
+  const toastWrap = document.getElementById('toast');
   const MOBILE_Q = window.matchMedia('(max-width: 900px)');
 
   function fit(){
-    // Desktop: leave space for sidebar; Mobile: canvas full-width (drawer overlays)
     const desktop = !MOBILE_Q.matches;
     const leftPad = desktop ? parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) : 0;
     const barH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-h'));
@@ -149,9 +191,7 @@
   MOBILE_Q.addEventListener?.('change', fit);
 
   // Copy/share
-  async function doCopy(text){
-    try { await navigator.clipboard.writeText(text); return true; } catch(e){ return false; }
-  }
+  async function doCopy(text){ try { await navigator.clipboard.writeText(text); return true; } catch(e){ return false; } }
   copyBtn.addEventListener('click', async ()=>{
     const ok = await doCopy(shareInput.value);
     copyBtn.textContent = ok ? 'Copied' : 'Copy Link';
@@ -167,7 +207,7 @@
     if (ok) setTimeout(()=>shareBtn.textContent='Share', 1000);
   });
 
-  // Mobile players drawer
+  // Mobile drawer
   function openDrawer(){ document.body.classList.add('mobile-drawer-open'); }
   function closeDrawer(){ document.body.classList.remove('mobile-drawer-open'); }
   playersBtn.addEventListener('click', openDrawer);
@@ -175,7 +215,7 @@
 
   const me = { id:null, name:null, color:"#ffffff", size:Number(sizeInput.value)||4 };
 
-  // Live brush-size update & mobile ± buttons
+  // Brush size
   function clampSize(v){ return Math.max(1, Math.min(50, Math.round(v))); }
   sizeInput.addEventListener('input', ()=>{
     let v = parseFloat(sizeInput.value);
@@ -189,8 +229,6 @@
     let v = clampSize((Number(sizeInput.value)||me.size||4) + 1);
     sizeInput.value = String(v); me.size = v;
   });
-
-  // Wheel ±1 on desktop
   canvas.addEventListener('wheel', (e)=>{
     e.preventDefault();
     let v = Number(sizeInput.value) || me.size || 4;
@@ -201,53 +239,34 @@
   }, {passive:false});
 
   // WS + links
-  let ws, httpUrl="", wsUrl="";
+  let ws, httpUrl="", wsUrl="", pendingName="";
   function send(obj){ try{ ws && ws.readyState===1 && ws.send(JSON.stringify(obj)); }catch(e){} }
 
   async function detectLinks(){
     const res = await fetch('/whoami', {cache:'no-store'});
     const info = await res.json();
     httpUrl = info.http_url; wsUrl = info.ws_url;
-    // Desktop shows input; mobile still needs it for copy/share
     if (shareInput) shareInput.value = httpUrl;
+  }
+
+  function showToast(text){
+    const el = document.createElement('div');
+    el.className = 'toast show';
+    el.textContent = text;
+    toastWrap.appendChild(el);
+    setTimeout(()=>{ el.remove(); }, 1900);
   }
 
   async function connect(){
     ws = new WebSocket(wsUrl);
-    ws.onopen = ()=>{ wsdebug.textContent = "Connected"; };
+    ws.onopen = ()=>{
+      wsdebug.textContent = "Connected";
+      send({type:'hello', name: pendingName});
+    };
     ws.onclose = ()=>{ wsdebug.textContent = "Disconnected"; setTimeout(connect, 800); };
     ws.onerror = ()=>{ wsdebug.textContent = "Error"; };
     ws.onmessage = ev => handle(JSON.parse(ev.data));
   }
-
-  // Name edit UX
-  function startRename(){
-    const wrapper = document.getElementById('mePill');
-    const current = me.name || "";
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.value = current;
-    input.className = 'name-input';
-    input.maxLength = 24;
-    wrapper.replaceChild(input, meName);
-    input.focus(); input.select();
-    function finish(save){
-      const newName = save ? (input.value || "").trim() : current;
-      wrapper.replaceChild(meName, input);
-      if (save && newName && newName !== current) {
-        meName.textContent = newName;
-        send({type:'rename', name:newName});
-      } else {
-        meName.textContent = current || "me";
-      }
-    }
-    input.addEventListener('keydown', (e)=>{
-      if (e.key === 'Enter') finish(true);
-      else if (e.key === 'Escape') finish(false);
-    });
-    input.addEventListener('blur', ()=> finish(true));
-  }
-  editBtn.addEventListener('click', startRename);
 
   function renderRoster(peers){
     rosterBox.innerHTML = "";
@@ -261,7 +280,14 @@
       dot.style.background = p.color;
       const name = document.createElement('span');
       name.textContent = p.name;
-      div.appendChild(dot); div.appendChild(name);
+
+      const poke = document.createElement('button');
+      poke.className = 'iconbtn poke';
+      poke.title = 'Poke';
+      poke.textContent = '👈';
+      poke.addEventListener('click', ()=> send({type:'poke', to: p.id}));
+
+      div.appendChild(dot); div.appendChild(name); div.appendChild(poke);
       rosterBox.appendChild(div);
     }
   }
@@ -300,24 +326,28 @@
     last = p;
   });
 
-  const sendClear = ()=> send({type:'clearMine'});
+  const sendClearAll = ()=> send({type:'clearAll'});
   const sendUndo  = ()=> send({type:'undoMine'});
-  clearBtn.addEventListener('click', sendClear);
-  clearBtn2.addEventListener('click', sendClear);
+  clearBtn.addEventListener('click', sendClearAll);
+  clearBtn2.addEventListener('click', sendClearAll);
   undoBtn.addEventListener('click', sendUndo);
   undoBtn2.addEventListener('click', sendUndo);
 
   function handle(msg){
     if (!msg || !msg.type) return;
 
+    if (msg.type === 'needName') {
+      // invalid name; re-show login
+      login.style.display = 'flex';
+      showToast("Invalid name. Use 3–24 chars (A-Z, 0-9, space, - _)");
+      return;
+    }
     if (msg.type === 'welcome') {
       me.id = msg.id; me.name = msg.name; me.color = msg.color;
       meName.textContent = me.name;
       meDot.style.background = me.color;
-      return;
-    }
-    if (msg.type === 'youRenamed') {
-      if (msg.ok) { me.name = msg.name; meName.textContent = msg.name; }
+      // hide overlay
+      login.style.display = 'none';
       return;
     }
     if (msg.type === 'roster') {
@@ -343,9 +373,28 @@
     }
     if (msg.type === 'draw') { drawSeg(msg.x0, msg.y0, msg.x1, msg.y1, msg.color, msg.size); return; }
     if (msg.type === 'dot')  { drawDot(msg.x, msg.y, msg.color, msg.size); return; }
+    if (msg.type === 'boop') { showToast(`${msg.fromName} booped you!`); return; }
   }
 
-  (async ()=>{ await detectLinks(); await connect(); })();
+  // Login flow
+  function validLocalName(s){
+    return /^[A-Za-z0-9 _-]{3,24}$/.test((s||"").trim());
+  }
+  function tryPlay(){
+    const n = (loginName.value||"").trim();
+    if (!validLocalName(n)) {
+      loginName.focus();
+      loginName.select();
+      return;
+    }
+    pendingName = n;
+    detectLinks().then(connect);
+  }
+  playBtn.addEventListener('click', tryPlay);
+  loginName.addEventListener('keydown', e=>{ if (e.key==='Enter') tryPlay(); });
+
+  // Autofocus name
+  setTimeout(()=> loginName.focus(), 50);
 })();
 </script>
 </body>
