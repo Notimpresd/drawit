@@ -7,14 +7,10 @@ from aiohttp import web
 PORT = int(os.environ.get("PORT", "8000"))
 
 clients = set()
-users = {}   # ws -> {"id","name","color"}
+users = {}            # ws -> {"id","name","color","device"}
+device_to_ws = {}     # device_id -> ws  (block multiple logins from same device)
 HISTORY = []
 MAX_EVENTS = 8000
-
-ADJ = ["swift","brave","calm","lucky","sunny","fuzzy","witty","quiet","eager","bright",
-       "merry","zesty","nifty","spicy","bouncy","snappy","kind","bold","jolly","neat"]
-NOUN = ["panda","tiger","eagle","otter","koala","lynx","fox","whale","moose","hare",
-        "sparrow","orca","falcon","wolf","bear","owl","yak","ibis","bison","gecko"]
 
 def sanitize_name(s: str) -> str:
     s = (s or "").strip()
@@ -53,43 +49,33 @@ async def send_roster():
     await broadcast({"type":"roster","peers":roster})
 
 async def remove_client(ws):
-    uid=None
-    if ws in users:
-        uid=users[ws]["id"]; del users[ws]
-    if ws in clients:
-        clients.remove(ws)
-    if uid is not None:
-        HISTORY[:]=[e for e in HISTORY if e.get("from")!=uid]
-        await send_roster()
-        await broadcast({"type":"rebuild","events":HISTORY})
+    info = users.pop(ws, None)
+    clients.discard(ws)
+    if info:
+        did = info.get("device")
+        if did and device_to_ws.get(did) is ws:
+            device_to_ws.pop(did, None)
+        # prune that user's strokes
+        HISTORY[:] = [e for e in HISTORY if e.get("from") != info["id"]]
+    await send_roster()
+    await broadcast({"type":"rebuild","events":HISTORY})
 
-# ---------- HTTP ----------
+# ---------------- HTTP ----------------
 async def index(request: web.Request):
     return web.FileResponse(Path(__file__).with_name("index.html"))
 
-async def whoami(request: web.Request):
-    proto = request.headers.get("X-Forwarded-Proto", request.scheme)
-    host  = request.headers.get("X-Forwarded-Host", request.host)
-    ws_proto = "wss" if proto == "https" else "ws"
-    return web.json_response({
-        "http_url": f"{proto}://{host}/index.html",
-        "ws_url":   f"{ws_proto}://{host}/ws"
-    }, headers={"Cache-Control":"no-store","Access-Control-Allow-Origin":"*"})
+async def index_redirect(request: web.Request):
+    raise web.HTTPPermanentRedirect("/")
 
-# ---------- WebSocket ----------
+# --------------- WebSocket ---------------
 async def ws_handler(request: web.Request):
     ws = web.WebSocketResponse(heartbeat=20)
     await ws.prepare(request)
     clients.add(ws)
 
     uid = "".join(random.choices(string.ascii_lowercase+string.digits, k=8))
-    # pick a unique-ish color
-    taken_colors = {u["color"] for u in users.values()}
-    color = rand_color(); tries=0
-    while color in taken_colors and tries<2000:
-        color = rand_color(); tries+=1
-
-    info = {"id":uid, "name":None, "color":color}  # name arrives in "hello"
+    color = rand_color()
+    info = {"id":uid, "name":None, "color":color, "device":None}  # filled on "hello"
 
     try:
         async for msg in ws:
@@ -98,31 +84,49 @@ async def ws_handler(request: web.Request):
             data = msg.json(loads=json.loads)
             t = data.get("type")
 
-            # Client sends first: {"type":"hello","name":"..."}
+            # First message must be hello with name + deviceId
             if t == "hello" and info["name"] is None:
-                raw = str(data.get("name",""))
-                new = sanitize_name(raw)
-                if not new:
-                    await ws.send_json({"type":"needName","reason":"invalid"}); 
+                raw_name  = str(data.get("name",""))
+                device_id = str(data.get("device","")).strip()[:64]
+                # Validate before uniqueness
+                if not device_id:
+                    await ws.send_json({"type":"needName","reason":"device"})
                     continue
-                # enforce uniqueness
-                others = {u["name"] for u in users.values()}
-                base, new_name, suffix = new, new, 1
+                cleaned = sanitize_name(raw_name)  # empty if <3 or illegal chars
+                if not cleaned:
+                    # tell client to re-show hint (reason best-effort)
+                    reason = "short" if len((raw_name or "").strip()) < 3 else "chars"
+                    await ws.send_json({"type":"needName","reason":reason})
+                    continue
+
+                # duplicate device? ban this attempt
+                if device_id in device_to_ws and device_to_ws[device_id] in users:
+                    await ws.send_json({"type":"banned","reason":"duplicate_device"})
+                    await ws.close()
+                    break
+
+                # make unique among connected names
+                others = {u["name"] for u in users.values() if u["name"]}
+                base, new_name, suffix = cleaned, cleaned, 1
                 while new_name in others:
                     suf = f"-{suffix}"
                     if len(base)+len(suf) > 24:
                         base = base[:max(3,24-len(suf))]
                     new_name = base + suf
                     suffix += 1
+
                 info["name"] = new_name
+                info["device"] = device_id
                 users[ws] = info
+                device_to_ws[device_id] = ws
+
                 await ws.send_json({"type":"welcome", **info})
                 await send_roster()
                 if HISTORY:
                     await ws.send_json({"type":"history","events":HISTORY})
                 continue
 
-            # Ignore gameplay until named
+            # Ignore until named
             if info["name"] is None:
                 continue
 
@@ -159,40 +163,19 @@ async def ws_handler(request: web.Request):
 
             elif t=="poke":
                 target_id = str(data.get("to",""))
-                # find target socket
-                target_ws = None
-                for w,u in users.items():
-                    if u["id"] == target_id:
-                        target_ws = w; break
+                target_ws = next((w for w,u in users.items() if u["id"]==target_id), None)
                 if target_ws:
                     try:
                         await target_ws.send_json({"type":"boop","fromId":info["id"],"fromName":info["name"]})
                     except Exception:
                         pass
 
-            elif t=="rename":
-                # (Not used by new UI, but supported.)
-                raw = str(data.get("name",""))
-                new = sanitize_name(raw)
-                if not new:
-                    await ws.send_json({"type":"youRenamed","name":info["name"],"ok":False,"reason":"invalid"})
-                    continue
-                others = {u["name"] for w,u in users.items() if w is not ws}
-                base = new; new_name = new; suffix=1
-                while new_name in others:
-                    suf=f"-{suffix}"
-                    if len(base)+len(suf)>24: base = base[:max(3,24-len(suf))]
-                    new_name = base + suf; suffix+=1
-                info["name"] = new_name
-                await send_roster()
-                await ws.send_json({"type":"youRenamed","name":new_name,"ok":True})
     finally:
         await remove_client(ws)
 
 app = web.Application()
 app.router.add_get("/", index)
-app.router.add_get("/index.html", index)
-app.router.add_get("/whoami", whoami)
+app.router.add_get("/index.html", index_redirect)  # discourage sharing /index.html
 app.router.add_get("/ws", ws_handler)
 
 if __name__ == "__main__":
