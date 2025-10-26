@@ -88,13 +88,11 @@ async def ws_handler(request: web.Request):
             if t == "hello" and info["name"] is None:
                 raw_name  = str(data.get("name",""))
                 device_id = str(data.get("device","")).strip()[:64]
-                # Validate before uniqueness
                 if not device_id:
                     await ws.send_json({"type":"needName","reason":"device"})
                     continue
                 cleaned = sanitize_name(raw_name)  # empty if <3 or illegal chars
                 if not cleaned:
-                    # tell client to re-show hint (reason best-effort)
                     reason = "short" if len((raw_name or "").strip()) < 3 else "chars"
                     await ws.send_json({"type":"needName","reason":reason})
                     continue
@@ -105,7 +103,7 @@ async def ws_handler(request: web.Request):
                     await ws.close()
                     break
 
-                # make unique among connected names
+                # unique name
                 others = {u["name"] for u in users.values() if u["name"]}
                 base, new_name, suffix = cleaned, cleaned, 1
                 while new_name in others:

@@ -19,6 +19,7 @@
   html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;overflow:hidden}
   .only-mobile{display:none} .only-desktop{display:initial}
 
+  /* Top bar */
   #topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
           padding:8px 10px;height:var(--bar-h);background:var(--panel);border-bottom:1px solid var(--line);
           position:fixed;top:0;left:0;right:0;z-index:10}
@@ -27,6 +28,7 @@
   button:hover{background:var(--btn2)} button:active{background:var(--btn3);border-color:var(--bd2);transform:translateY(1px)}
   .small{font-size:12px;opacity:.75} .grow{flex:1 1 auto} #size{width:64px}
 
+  /* Layout */
   #sidebar{position:fixed;top:var(--bar-h);bottom:0;left:0;width:var(--sidebar-w);
            border-right:1px solid var(--line);background:var(--panel);padding:10px 10px 12px;overflow:auto;z-index:9}
   #canvas{position:fixed;top:var(--bar-h);left:var(--sidebar-w);right:0;bottom:0;background:var(--canvas);cursor:crosshair;touch-action:none}
@@ -39,11 +41,13 @@
   .iconbtn{padding:4px 6px;line-height:1;border-radius:8px}
   .poke{margin-left:auto}
 
+  /* Toast */
   #toast{position:fixed;top:calc(var(--bar-h) + 10px);left:50%;transform:translateX(-50%);z-index:20;pointer-events:none}
   .toast{background:var(--panel);border:1px solid var(--bd);padding:10px 14px;border-radius:10px;box-shadow:0 10px 30px #0006;opacity:0}
   .toast.show{animation:fadeSlide 1.8s ease forwards}
   @keyframes fadeSlide{0%{opacity:0;transform:translate(-50%,-6px)}10%{opacity:1;transform:translate(-50%,0)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-6px)}}
 
+  /* Login overlay */
   #overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:30}
   .login-card{width:min(92vw,420px);background:var(--panel);border:1px solid var(--bd);border-radius:16px;box-shadow:0 20px 60px #0008;padding:20px}
   .title{font-weight:700;font-size:28px;margin:4px 0 14px}
@@ -52,6 +56,7 @@
   .hint{font-size:12px;opacity:.78;margin-top:8px;display:none;color:#ff8080}
   .play{background:var(--accent);border-color:#9b92ff;color:#fff}
 
+  /* Mobile */
   @media (max-width:900px){
     :root{--bar-h:56px}
     .only-mobile{display:initial} .only-desktop{display:none}
@@ -118,7 +123,7 @@
 
 <script>
 (function(){
-  // ---------- Setup ----------
+  // ---------- refs ----------
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d', { alpha:false });
   ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.miterLimit = 2;
@@ -149,7 +154,7 @@
   const toastWrap = document.getElementById('toast');
   const MOBILE_Q = window.matchMedia('(max-width: 900px)');
 
-  // ---------- Canvas size (Hi-DPI crisp) ----------
+  // ---------- size & Hi-DPI ----------
   function fit(){
     const desktop = !MOBILE_Q.matches;
     const leftPad = desktop ? parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) : 0;
@@ -166,7 +171,7 @@
   window.addEventListener('resize', fit); fit();
   MOBILE_Q.addEventListener?.('change', fit);
 
-  // ---------- Theme ----------
+  // ---------- theme ----------
   const root = document.documentElement;
   function applyTheme(t){ root.setAttribute('data-theme', t); localStorage.setItem('drawitTheme', t); }
   (function(){
@@ -177,13 +182,13 @@
   })();
   themeToggle.addEventListener('click', ()=> applyTheme(root.getAttribute('data-theme')==='dark'?'light':'dark'));
 
-  // ---------- Drawer (mobile) ----------
+  // ---------- drawer (mobile) ----------
   const openDrawer = ()=> document.body.classList.add('mobile-drawer-open');
   const closeDrawer = ()=> document.body.classList.remove('mobile-drawer-open');
   playersBtn?.addEventListener('click', openDrawer);
   scrim?.addEventListener('click', closeDrawer);
 
-  // ---------- Toast ----------
+  // ---------- toast ----------
   function showToast(text){
     const el = document.createElement('div');
     el.className = 'toast show';
@@ -192,14 +197,14 @@
     setTimeout(()=> el.remove(), 1900);
   }
 
-  // ---------- Share ----------
+  // ---------- share ----------
   const SHARE_URL = "https://drawit-o0jo.onrender.com/";
   shareBtn.addEventListener('click', async ()=>{
     try{ await navigator.clipboard.writeText(SHARE_URL); showToast("Link copied"); }
     catch(e){ showToast("Copy failed"); }
   });
 
-  // ---------- Device id ----------
+  // ---------- device id ----------
   function deviceId(){
     let d = localStorage.getItem('drawitDevice');
     if (!d){
@@ -209,7 +214,7 @@
     return d;
   }
 
-  // ---------- Brush controls ----------
+  // ---------- brush ----------
   const me = { id:null, name:null, color:"#ffffff", size:Number(sizeInput.value)||4 };
   const clamp = v => Math.max(1, Math.min(50, Math.round(v)));
   sizeInput.addEventListener('input', ()=>{ const v = parseFloat(sizeInput.value); if (Number.isFinite(v)) me.size = clamp(v); });
@@ -217,7 +222,7 @@
   plusBtn?.addEventListener('click',  ()=>{ const v = clamp((+sizeInput.value||me.size||4)+1); sizeInput.value=v; me.size=v; });
   canvas.addEventListener('wheel', e=>{ e.preventDefault(); const v = clamp((+sizeInput.value||me.size||4)+(e.deltaY<0?1:-1)); sizeInput.value=v; me.size=v; }, {passive:false});
 
-  // ---------- Hotkeys ----------
+  // ---------- hotkeys ----------
   const sendClearAll = ()=> send({type:'clearAll'});
   const sendUndo = ()=> send({type:'undoMine'});
   window.addEventListener('keydown', (e)=>{
@@ -226,7 +231,7 @@
     else if (!e.ctrlKey && !e.metaKey && k==='c'){ e.preventDefault(); sendClearAll(); }
   });
 
-  // ---------- WebSocket ----------
+  // ---------- WS ----------
   let ws;
   const wsUrl = (location.protocol==='https:'?'wss://':'ws://') + location.host + '/ws';
   function send(obj){ try{ ws && ws.readyState===1 && ws.send(JSON.stringify(obj)); }catch(e){} }
@@ -253,16 +258,13 @@
     }
   }
 
-  // ---------- Smooth drawing ----------
+  // ---------- smooth drawing (local) ----------
   function setStroke(color, size){ ctx.strokeStyle=color; ctx.lineWidth=size; }
   function drawDot(x,y,color,size){ ctx.beginPath(); ctx.arc(x,y,Math.max(1,size/2),0,Math.PI*2); ctx.fillStyle=color; ctx.fill(); }
   const mid = (a,b)=>({x:(a.x+b.x)/2, y:(a.y+b.y)/2});
 
   let drawing=false, last=null, lastMid=null, sid=0;
-  const pos = e => {
-    const r = canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  };
+  const pos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
 
   canvas.addEventListener('pointerdown', e=>{
     e.preventDefault();
@@ -284,25 +286,32 @@
   canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('lostpointercapture', endPointer);
 
-  // Remote smoothing: keep last point/mid per sender
-  const remoteState = new Map(); // id -> {last, mid}
-  function smoothRemote(e){
-    const id = e.from;
+  // ---------- smooth remote + replay (fixes jagged undo) ----------
+  const remoteState = new Map(); // id -> { sid, last:{x,y}, mid:{x,y} }
+  function stepSmooth(id, sid, x0,y0, x1,y1, color,size){
     let s = remoteState.get(id);
-    const p0 = {x:e.x0, y:e.y0}, p1={x:e.x1, y:e.y1};
-    const m1 = mid(p0,p1);
-    setStroke(e.color, e.size);
-    if (s && s.mid){
-      ctx.beginPath(); ctx.moveTo(s.mid.x, s.mid.y); ctx.quadraticCurveTo(p0.x, p0.y, m1.x, m1.y); ctx.stroke();
-    } else {
-      // seed with a simple segment
-      ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
-      s = {};
+    if (!s || s.sid !== sid){
+      s = { sid, last:{x:x0,y:y0}, mid:{x:x0,y:y0} };
+      remoteState.set(id, s);
     }
-    s.last = p1; s.mid = m1; remoteState.set(id, s);
+    const m1 = { x:(x0+x1)/2, y:(y0+y1)/2 };
+    setStroke(color, size);
+    ctx.beginPath();
+    ctx.moveTo(s.mid.x, s.mid.y);
+    ctx.quadraticCurveTo(x0, y0, m1.x, m1.y);
+    ctx.stroke();
+    s.last = {x:x1,y:y1}; s.mid = m1;
+  }
+  function replaySmooth(events){
+    remoteState.clear();
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    for (const e of (events||[])){
+      if (e.type === 'dot') drawDot(e.x, e.y, e.color, e.size);
+      else if (e.type === 'draw') stepSmooth(e.from, (e.sid ?? 0), e.x0, e.y0, e.x1, e.y1, e.color, e.size);
+    }
   }
 
-  // ---------- Message handler ----------
+  // ---------- ws handler ----------
   const handle = (msg)=>{
     if (!msg || !msg.type) return;
 
@@ -325,31 +334,15 @@
     }
     if (msg.type === 'roster') { renderRoster(msg.peers||[]); return; }
 
-    if (msg.type === 'history') {
-      // redraw (basic segments)
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      for (const e of (msg.events||[])) {
-        if (e.type==='draw'){ setStroke(e.color,e.size); ctx.beginPath(); ctx.moveTo(e.x0,e.y0); ctx.lineTo(e.x1,e.y1); ctx.stroke(); }
-        else if (e.type==='dot'){ drawDot(e.x,e.y,e.color,e.size); }
-      }
-      remoteState.clear();
-      return;
-    }
-    if (msg.type === 'rebuild') {
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      for (const e of (msg.events||[])) {
-        if (e.type==='draw'){ setStroke(e.color,e.size); ctx.beginPath(); ctx.moveTo(e.x0,e.y0); ctx.lineTo(e.x1,e.y1); ctx.stroke(); }
-        else if (e.type==='dot'){ drawDot(e.x,e.y,e.color,e.size); }
-      }
-      remoteState.clear();
-      return;
-    }
-    if (msg.type === 'draw')  { smoothRemote(msg); return; }
-    if (msg.type === 'dot')   { drawDot(msg.x,msg.y,msg.color,msg.size); return; }
+    if (msg.type === 'history') { replaySmooth(msg.events); return; }
+    if (msg.type === 'rebuild') { replaySmooth(msg.events); return; }
+
+    if (msg.type === 'draw')  { stepSmooth(msg.from, (msg.sid ?? 0), msg.x0, msg.y0, msg.x1, msg.y1, msg.color, msg.size); return; }
+    if (msg.type === 'dot')   { drawDot(msg.x, msg.y, msg.color, msg.size); return; }
     if (msg.type === 'boop')  { showToast(`${msg.fromName} booped you!`); return; }
   };
 
-  // ---------- Login ----------
+  // ---------- login ----------
   let pendingName = "";
   const validChars = s => /^[A-Za-z0-9 _-]+$/.test(s);
   function tryPlay(){
@@ -362,7 +355,7 @@
   loginName.addEventListener('keydown', e=>{ if (e.key==='Enter') tryPlay(); });
   setTimeout(()=> loginName.focus(), 50);
 
-  // ---------- Top buttons ----------
+  // ---------- top buttons ----------
   undoBtn.addEventListener('click', ()=> send({type:'undoMine'}));
   clearBtn.addEventListener('click', ()=> send({type:'clearAll'}));
 })();
