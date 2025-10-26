@@ -7,46 +7,89 @@
 <style>
   :root{
     --bar-h: 64px;
-    --btn-bg:#222; --btn-bg-hover:#2b2b2b; --btn-bg-press:#3a2f6b;
-    --btn-border:#444; --btn-border-press:#5c57a0; --btn-shadow:#0008;
-    --sidebar-w:240px;
+    --sidebar-w: 240px;
+    --bg:#111; --panel:#151515; --line:#222; --text:#eee;
+    --btn:#222; --btn2:#2b2b2b; --btn3:#3a2f6b; --bd:#444; --bd2:#5c57a0; --sh:#0008;
   }
-  html,body{height:100%;margin:0;background:#111;color:#eee;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;}
-  #topbar { display:flex; gap:10px; align-items:center; padding:8px 10px; height:var(--bar-h);
-            background:#161616; border-bottom:1px solid #222; position:fixed; top:0; left:0; right:0; z-index:10; flex-wrap:wrap; }
-  input, button { background:var(--btn-bg); color:#eee; border:1px solid var(--btn-border); padding:6px 10px; border-radius:10px; }
-  button{ cursor:pointer; box-shadow:0 3px 0 var(--btn-shadow), 0 0 0 1px #0002 inset;
-          transition: transform .12s ease, background-color .15s ease, border-color .15s ease, filter .15s ease, box-shadow .15s ease; }
-  button:hover{ background:var(--btn-bg-hover); }
-  button:active{ background:var(--btn-bg-press); border-color:var(--btn-border-press); transform:translateY(1px); box-shadow:0 2px 0 var(--btn-shadow), 0 0 0 1px #0002 inset; }
-  #sharelink{ width:380px; }
-  #size{ width:64px; }
-  .small{ font-size:12px; opacity:.7; }
-  #sidebar{ position:fixed; top:var(--bar-h); bottom:0; left:0; width:var(--sidebar-w); border-right:1px solid #222; background:#151515; padding:8px; overflow:auto; }
-  #canvas{ position:fixed; top:var(--bar-h); left:var(--sidebar-w); right:0; bottom:0; background:#0d0d0d; cursor:crosshair; }
-  .pill{ display:flex; align-items:center; gap:8px; background:#1b1b1b; padding:6px 8px; border:1px solid #333; border-radius:12px; margin-bottom:6px; }
-  .dot{ width:14px; height:14px; border-radius:50%; border:1px solid #0008; box-shadow:0 0 0 1px #0004 inset; }
-  .btnrow{ display:flex; gap:8px; margin-top:6px; }
-  .iconbtn{ padding:4px 6px; line-height:1; border-radius:8px; }
-  .name-input{ width:100%; padding:5px 7px; border-radius:8px; }
-  #roster{ padding:6px; }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;}
+  .only-mobile{display:none}
+  .only-desktop{display:initial}
+
+  #topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+          padding:8px 10px;height:var(--bar-h);background:#161616;border-bottom:1px solid var(--line);
+          position:fixed;top:0;left:0;right:0;z-index:10}
+  input,button{background:var(--btn);color:var(--text);border:1px solid var(--bd);padding:6px 10px;border-radius:10px}
+  button{cursor:pointer;box-shadow:0 3px 0 var(--sh),0 0 0 1px #0002 inset;
+         transition:transform .12s,background-color .15s,border-color .15s,box-shadow .15s}
+  button:hover{background:var(--btn2)}
+  button:active{background:var(--btn3);border-color:var(--bd2);transform:translateY(1px);box-shadow:0 2px 0 var(--sh),0 0 0 1px #0002 inset}
+  .small{font-size:12px;opacity:.75}
+  .grow{flex:1 1 auto}
+  #sharelink{width:380px}
+  #size{width:64px}
+
+  #sidebar{position:fixed;top:var(--bar-h);bottom:0;left:0;width:var(--sidebar-w);
+           border-right:1px solid var(--line);background:var(--panel);padding:8px;overflow:auto;z-index:9}
+  #canvas{position:fixed;top:var(--bar-h);left:var(--sidebar-w);right:0;bottom:0;background:#0d0d0d;cursor:crosshair}
+
+  .pill{display:flex;align-items:center;gap:8px;background:#1b1b1b;padding:6px 8px;border:1px solid #333;border-radius:12px;margin-bottom:6px}
+  .dot{width:14px;height:14px;border-radius:50%;border:1px solid #0008;box-shadow:0 0 0 1px #0004 inset}
+  .btnrow{display:flex;gap:8px;margin-top:6px}
+  .iconbtn{padding:4px 6px;line-height:1;border-radius:8px}
+  .name-input{width:100%;padding:5px 7px;border-radius:8px}
+
+  /* ---------- Mobile (<900px) ---------- */
+  @media (max-width: 900px){
+    :root{ --bar-h: 56px; }
+    .only-mobile{display:initial}
+    .only-desktop{display:none}
+    #sharelink{display:none}
+    #sidebar{
+      width: min(85vw, 320px);
+      transform: translateX(-100%);
+      transition: transform .2s ease;
+      box-shadow: none;
+    }
+    body.mobile-drawer-open #sidebar{
+      transform: translateX(0);
+      box-shadow: 8px 0 20px #000a;
+    }
+    #drawerScrim{
+      position:fixed;inset:0;background:#0008;z-index:8;display:none
+    }
+    body.mobile-drawer-open #drawerScrim{display:block}
+    /* Canvas takes full width on mobile (sidebar overlays) */
+    #canvas{left:0}
+  }
 </style>
 </head>
 <body>
 <div id="topbar">
-  <span>Share this link:</span>
-  <input id="sharelink" readonly>
-  <button id="copylink">Copy Link</button>
+  <!-- Left: Share -->
+  <span class="only-desktop">Share:</span>
+  <input id="sharelink" class="only-desktop" readonly>
+  <button id="copylink" title="Copy share link">Copy Link</button>
+  <button id="shareBtn" class="only-mobile" title="Share">Share</button>
 
-  <span style="margin-left:16px;">Brush:</span>
-  <input id="size" type="number" min="1" max="50" step="1" value="4">
+  <!-- Tools -->
+  <span class="only-desktop" style="margin-left:16px;">Brush:</span>
+  <input id="size" type="number" min="1" max="50" step="1" value="4" aria-label="Brush size">
+  <div class="only-mobile" style="display:flex;gap:6px">
+    <button id="minusSize" title="Smaller">−</button>
+    <button id="plusSize"  title="Bigger">+</button>
+  </div>
   <button id="undo">Undo</button>
   <button id="clear">Clear Mine</button>
-  <span id="badge" style="margin-left:auto;">Peers: 0</span>
-  <span id="wsdebug" class="small" style="display:block; width:100%;">Connecting...</span>
+
+  <div class="grow"></div>
+
+  <!-- Right: Players + Status -->
+  <span id="badge">Peers: 0</span>
+  <span id="wsdebug" class="small" style="margin-left:8px;">Connecting...</span>
+  <button id="playersBtn" class="only-mobile" style="margin-left:8px">Players</button>
 </div>
 
-<div id="sidebar">
+<div id="sidebar" aria-label="Players drawer">
   <div id="me">
     <div class="pill" id="mePill">
       <span class="dot" id="meDot"></span>
@@ -58,8 +101,9 @@
       <button id="clear2">Clear Mine</button>
     </div>
   </div>
-  <div id="roster"></div>
+  <div id="roster" style="padding:6px"></div>
 </div>
+<div id="drawerScrim" class="only-mobile"></div>
 
 <canvas id="canvas"></canvas>
 
@@ -67,71 +111,112 @@
 (function(){
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d', { alpha:false });
-  const sizeInput = document.getElementById('size');
 
-  const copyBtn = document.getElementById('copylink');
-  const shareInput = document.getElementById('sharelink');
-  const wsdebug = document.getElementById('wsdebug');
-  const badge = document.getElementById('badge');
+  const sizeInput = document.getElementById('size');
+  const minusBtn  = document.getElementById('minusSize');
+  const plusBtn   = document.getElementById('plusSize');
+
+  const copyBtn   = document.getElementById('copylink');
+  const shareBtn  = document.getElementById('shareBtn');
+  const shareInput= document.getElementById('sharelink');
+  const wsdebug   = document.getElementById('wsdebug');
+  const badge     = document.getElementById('badge');
 
   const meName = document.getElementById('meName');
   const meDot  = document.getElementById('meDot');
-  const editBtn = document.getElementById('editName');
+  const editBtn= document.getElementById('editName');
   const rosterBox = document.getElementById('roster');
 
+  const playersBtn = document.getElementById('playersBtn');
+  const scrim = document.getElementById('drawerScrim');
+
   const undoBtn = document.getElementById('undo');
-  const undoBtn2 = document.getElementById('undo2');
-  const clearBtn = document.getElementById('clear');
-  const clearBtn2 = document.getElementById('clear2');
+  const undoBtn2= document.getElementById('undo2');
+  const clearBtn= document.getElementById('clear');
+  const clearBtn2= document.getElementById('clear2');
 
-  function fit(){ canvas.width = window.innerWidth - 240; canvas.height = window.innerHeight - parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-h')); }
+  const MOBILE_Q = window.matchMedia('(max-width: 900px)');
+
+  function fit(){
+    // Desktop: leave space for sidebar; Mobile: canvas full-width (drawer overlays)
+    const desktop = !MOBILE_Q.matches;
+    const leftPad = desktop ? parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-w')) : 0;
+    const barH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--bar-h'));
+    canvas.width  = window.innerWidth - leftPad;
+    canvas.height = window.innerHeight - barH;
+  }
   window.addEventListener('resize', fit); fit();
+  MOBILE_Q.addEventListener?.('change', fit);
 
-  // Copy share link
+  // Copy/share
+  async function doCopy(text){
+    try { await navigator.clipboard.writeText(text); return true; } catch(e){ return false; }
+  }
   copyBtn.addEventListener('click', async ()=>{
-    try { await navigator.clipboard.writeText(shareInput.value); copyBtn.textContent = 'Copied'; setTimeout(()=>copyBtn.textContent='Copy Link', 1000); }
-    catch(e){ /* ignore */ }
+    const ok = await doCopy(shareInput.value);
+    copyBtn.textContent = ok ? 'Copied' : 'Copy Link';
+    if (ok) setTimeout(()=>copyBtn.textContent='Copy Link', 1000);
   });
+  shareBtn.addEventListener('click', async ()=>{
+    const url = shareInput.value || location.href;
+    if (navigator.share) {
+      try { await navigator.share({title:'Join my draw room', url}); return; } catch(e){}
+    }
+    const ok = await doCopy(url);
+    shareBtn.textContent = ok ? 'Copied' : 'Share';
+    if (ok) setTimeout(()=>shareBtn.textContent='Share', 1000);
+  });
+
+  // Mobile players drawer
+  function openDrawer(){ document.body.classList.add('mobile-drawer-open'); }
+  function closeDrawer(){ document.body.classList.remove('mobile-drawer-open'); }
+  playersBtn.addEventListener('click', openDrawer);
+  scrim.addEventListener('click', closeDrawer);
 
   const me = { id:null, name:null, color:"#ffffff", size:Number(sizeInput.value)||4 };
 
-  // Live brush-size update while typing
+  // Live brush-size update & mobile ± buttons
+  function clampSize(v){ return Math.max(1, Math.min(50, Math.round(v))); }
   sizeInput.addEventListener('input', ()=>{
     let v = parseFloat(sizeInput.value);
-    if (Number.isFinite(v)) {
-      v = Math.max(1, Math.min(50, v));
-      me.size = v;
-    }
+    if (Number.isFinite(v)) me.size = clampSize(v);
+  });
+  minusBtn?.addEventListener('click', ()=>{
+    let v = clampSize((Number(sizeInput.value)||me.size||4) - 1);
+    sizeInput.value = String(v); me.size = v;
+  });
+  plusBtn?.addEventListener('click', ()=>{
+    let v = clampSize((Number(sizeInput.value)||me.size||4) + 1);
+    sizeInput.value = String(v); me.size = v;
   });
 
-  // Wheel over canvas: change size by ±1
+  // Wheel ±1 on desktop
   canvas.addEventListener('wheel', (e)=>{
     e.preventDefault();
     let v = Number(sizeInput.value) || me.size || 4;
     v += (e.deltaY < 0 ? 1 : -1);
-    if (v < 1) v = 1;
-    if (v > 50) v = 50;
-    v = Math.round(v);
+    v = clampSize(v);
     sizeInput.value = String(v);
     me.size = v;
   }, {passive:false});
 
+  // WS + links
   let ws, httpUrl="", wsUrl="";
   function send(obj){ try{ ws && ws.readyState===1 && ws.send(JSON.stringify(obj)); }catch(e){} }
 
   async function detectLinks(){
-    // fetch /whoami to build correct public links behind proxies
     const res = await fetch('/whoami', {cache:'no-store'});
     const info = await res.json();
     httpUrl = info.http_url; wsUrl = info.ws_url;
-    shareInput.value = httpUrl;
+    // Desktop shows input; mobile still needs it for copy/share
+    if (shareInput) shareInput.value = httpUrl;
   }
 
   async function connect(){
     ws = new WebSocket(wsUrl);
     ws.onopen = ()=>{ wsdebug.textContent = "Connected"; };
-    ws.onclose = ()=>{ wsdebug.textContent = "Disconnected - retrying..."; setTimeout(connect, 800); };
-    ws.onerror = ()=>{ wsdebug.textContent = "Socket error"; };
+    ws.onclose = ()=>{ wsdebug.textContent = "Disconnected"; setTimeout(connect, 800); };
+    ws.onerror = ()=>{ wsdebug.textContent = "Error"; };
     ws.onmessage = ev => handle(JSON.parse(ev.data));
   }
 
@@ -144,14 +229,10 @@
     input.value = current;
     input.className = 'name-input';
     input.maxLength = 24;
-    // replace text node with input temporarily
     wrapper.replaceChild(input, meName);
-    input.focus();
-    input.select();
-
+    input.focus(); input.select();
     function finish(save){
       const newName = save ? (input.value || "").trim() : current;
-      // restore span
       wrapper.replaceChild(meName, input);
       if (save && newName && newName !== current) {
         meName.textContent = newName;
